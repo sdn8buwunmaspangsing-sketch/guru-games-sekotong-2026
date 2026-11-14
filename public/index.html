@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="theme-color" content="#15273c" />
+<meta name="description" content="Pendaftaran, undian terbuka, dan bagan pertandingan Pekan Olahraga Guru PGRI Cabang Sekotong 18–19 November 2026." />
+<title>Pekan Olahraga Guru Sekotong · HGN & HUT ke-81 PGRI</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="topline"><span>HGN × HUT KE-81 PGRI</span><span>PEKAN OLAHRAGA GURU • 2026</span><span>SEKOTONG, LOMBOK BARAT</span></div>
+<header class="site-header">
+  <a class="brand" href="#beranda" data-page="beranda" aria-label="Beranda Pekan Olahraga Guru">
+    <span class="brand-mark">81<span>↗</span></span>
+    <span class="brand-copy"><strong>GURU <em>GAMES.</em></strong><small>PGRI CABANG SEKOTONG</small></span>
+  </a>
+  <nav class="main-nav" aria-label="Menu utama">
+    <button data-page="beranda" class="nav-link active">Beranda</button>
+    <button data-page="daftar" class="nav-link">Pendaftaran</button>
+    <button data-page="peserta" class="nav-link">Daftar Tim</button>
+    <button data-page="undian" class="nav-link">Undian TM</button>
+    <button data-page="bagan" class="nav-link">Bagan Lomba</button>
+  </nav>
+  <button type="button" id="soundToggle" class="sound-toggle" data-action="toggle-audio" aria-label="Aktifkan efek suara" aria-pressed="false"><span aria-hidden="true">♫</span><small>SUARA OFF</small></button>
+  <button id="btnAdminNav" class="admin-link" data-page="panitia"><svg class="ico"><use href="#i-lock"/></svg> Panitia</button>
+  <button id="mobileMenu" class="mobile-menu" aria-label="Buka menu">☰</button>
+</header>
+<main>
+<section class="page active" id="page-beranda">
+  <div class="hero">
+    <div class="hero-bg-number">81</div>
+    <div class="hero-copy">
+      <span class="eyebrow"><span class="eyebrow-square"></span> PGRI CABANG KECAMATAN SEKOTONG</span>
+      <div class="hero-kicker">18 — 19 NOVEMBER 2026 <span>●</span> SEKOTONG</div>
+      <h1>SEMANGAT<br><i>GURU.</i><br><span>JUARA!</span></h1>
+      <p>Merayakan Hari Guru Nasional dan HUT ke-81 PGRI lewat sportivitas, solidaritas, dan pertandingan antarranting yang penuh semangat.</p>
+      <div class="hero-actions">
+        <button class="btn btn-light" data-page="daftar">Daftarkan Ranting <span>↗</span></button>
+        <button class="btn btn-outline-light" data-page="bagan">Lihat Bagan <span>↗</span></button>
+      </div>
+      <div class="hero-foot"><span><b>04</b> KATEGORI PERTANDINGAN</span><span><b>01</b> TAGIHAN PER RANTING</span></div>
+    </div>
+    <div class="hero-art" aria-hidden="true"><div class="hero-badges"><img src="assets/hut81.jpg" alt=""><img src="assets/logo-pgri.jpg" alt=""><img src="assets/logo-pjok.jpg" alt=""></div>
+      <img class="hero-sport-photo" src="assets/arena-guru-games.webp" alt="" />
+      <div class="hero-photo-stamp">PGRI <b>81</b> / 2026</div>
+      <div class="hero-photo-credit">FUTSAL · GOBAK SODOR · TARIK TAMBANG</div>
+      <div class="art-sticker"><span>PLAY<br>FAIR.</span><small>GURU GAMES</small></div>
+    </div>
+    <div class="hero-sideword">SATU PROFESI · SATU SEMANGAT · SATU LAPANGAN</div>
+  </div>
+  <div id="demoBanner" class="demo-banner" hidden><b>MODE DEMO</b><span>Data hanya tersimpan di browser ini dan tidak masuk ke panitia.</span><button id="resetDemo">Reset Data Demo</button></div>
+  <div class="status-strip"><span class="blinking-dot"></span><span id="openLabel">Pendaftaran dibuka</span><span class="strip-divider"></span><span id="liveStrip">Undian dan bagan dapat dipantau secara langsung</span><span class="strip-end">#GURUJUARA2026</span></div>
+  <section class="home-categories content-wrap">
+    <div class="section-heading"><div><span class="overline">01 / CABANG PERLOMBAAN</span><h2>Tiga lomba.<br><i>Empat kategori.</i></h2></div><p>Tiga cabang olahraga, termasuk tarik tambang putra dan putri. Satu ranting bisa mendaftarkan seluruhnya dalam satu formulir.</p></div>
+    <div class="category-grid" id="homeCategoryGrid"></div>
+  </section>
+  <section class="feature-band content-wrap">
+    <div class="feature-image"><img src="assets/poster.jpg" alt="Poster Pekan Olahraga Guru PGRI Cabang Sekotong" loading="lazy"><div class="poster-tag">POSTER RESMI KEGIATAN ↗</div></div>
+    <div class="feature-text"><span class="overline">02 / CARA BERPARTISIPASI</span><h2>Dari daftar<br><i>hingga juara.</i></h2><div class="timeline"><div><b>01</b><span><strong>Daftarkan ranting</strong><small>Pilih satu atau semua cabang, isi setiap daftar anggota, dan dapatkan satu total pembayaran.</small></span></div><div><b>02</b><span><strong>Verifikasi panitia</strong><small>Panitia mencatat status pembayaran. Tim tetap masuk daftar meskipun belum lunas.</small></span></div><div><b>03</b><span><strong>Undian terbuka saat TM</strong><small>Nama ranting diundi secara acak, satu per satu, dengan hasil yang ditayangkan bersama.</small></span></div><div><b>04</b><span><strong>Bagan siap digunakan</strong><small>Bagan tiap kategori otomatis tersusun dan hasil pertandingan bisa diperbarui panitia.</small></span></div></div><button class="btn btn-dark" data-page="daftar">Mulai pendaftaran <span>↗</span></button></div>
+  </section>
+  <section class="home-cta"><div><span class="overline inverse">18–19 NOV / SEKOTONG</span><h2>BERSAMA DI LAPANGAN.<br><i>SOLID DI PROFESI.</i></h2></div><button class="btn btn-light" data-page="undian">Saksikan undian <span>↗</span></button></section>
+</section>
+<section class="page inner-page" id="page-daftar">
+  <div class="page-head"><span class="overline">PENDAFTARAN / FORMULIR RANTING</span><h1>Daftarkan <i>timmu.</i></h1><p>Satu pendaftaran untuk seluruh cabang yang dipilih. Isi nama anggota pada tiap tim, lalu bayar satu tagihan untuk ranting Anda.</p></div>
+  <div class="register-layout">
+    <form id="registerForm" class="form-panel">
+      <div class="form-section-title"><span>01</span><div><h3>Identitas ranting</h3><p>Pilih ranting yang sudah ada atau ketik nama ranting baru.</p></div></div>
+      <div class="field"><label for="ranting">Nama ranting <b>*</b></label><input id="ranting" name="ranting" list="rantingSuggestions" required minlength="3" maxlength="100" placeholder="Contoh: Ranting SD ..." autocomplete="organization"><datalist id="rantingSuggestions"></datalist></div>
+      <div class="form-section-title"><span>02</span><div><h3>Pilih cabang lomba</h3><p>Boleh memilih lebih dari satu. Tarik tambang adalah paket dua tim: putra dan putri.</p></div></div>
+      <div id="registerCategories" class="choice-grid"></div>
+      <div class="form-section-title"><span>03</span><div><h3>Nama pemain per tim</h3><p>Setiap cabang yang dipilih mempunyai formulir anggota tersendiri. Jumlah pemain mengikuti juknis panitia.</p></div></div>
+      <div id="rosterSections" class="roster-sections"><div class="roster-empty">Pilih cabang lomba di atas untuk menampilkan kolom anggota.</div></div>
+      <div class="field split-field"><div><label for="contact">Nomor kontak penanggung jawab <span>(opsional)</span></label><input id="contact" name="contact" maxlength="100" placeholder="08xxxxxxxxxx" inputmode="tel"></div><div><label for="notes">Catatan tim <span>(opsional)</span></label><input id="notes" name="notes" maxlength="300" placeholder="Keterangan bila diperlukan"></div></div>
+      <div class="form-section-title"><span>04</span><div><h3>Satu total biaya pendaftaran</h3><p>Biaya dihitung otomatis berdasarkan cabang yang dipilih, tanpa biaya ganda untuk tarik tambang putra/putri.</p></div></div>
+      <div id="registrationInvoice" class="invoice-block" aria-live="polite"></div>
+      <div class="form-section-title"><span>05</span><div><h3>Metode pembayaran</h3><p>Pilih salah satu. Satu status pembayaran berlaku untuk seluruh tim dalam ranting.</p></div></div>
+      <div class="payment-grid"><label class="pay-option"><input type="radio" name="payment_method" value="cash" checked><span class="pay-icon">Rp</span><strong>Bayar langsung</strong><small>Kepada bendahara panitia</small></label><label class="pay-option"><input type="radio" name="payment_method" value="transfer"><span class="pay-icon">↗</span><strong>Transfer bank</strong><small>Rekening ditampilkan di sebelah</small></label></div>
+      <input class="trap" type="text" id="website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+      <p class="small-notice">Dengan mendaftar, Anda memastikan nama peserta benar dan telah memperoleh persetujuan untuk disampaikan kepada panitia kegiatan.</p>
+      <button id="submitRegister" type="submit" class="btn btn-red full-width">Daftarkan semua tim <span>↗</span></button>
+    </form>
+    <aside class="registration-aside"><div class="aside-top"><span class="overline inverse">INFORMASI KEGIATAN</span><h3>BERSIAP<br>BERLAGA.</h3><div class="aside-date">18—19 <span>NOV<br>2026</span></div><small>SEKOTONG · LOMBOK BARAT</small></div><div class="bank-card"><b>INFORMASI PEMBAYARAN</b><div id="bankInfo"></div></div><div class="help-card"><strong>Butuh bantuan?</strong><p>Untuk perubahan data pendaftaran atau konfirmasi pembayaran, silakan hubungi panitia.</p><p id="contactInfo">Kontak panitia akan ditambahkan.</p></div></aside>
+  </div>
+</section>
+<section class="page inner-page" id="page-peserta"><div class="page-head"><span class="overline">DATABASE / TIM TERDAFTAR</span><h1>Siapa saja <i>berlaga?</i></h1><p>Daftar tim tiap kategori dan status pembayaran per ranting. Nama pemain lengkap hanya dapat dilihat panitia.</p></div><div class="stats-row" id="participantStats"></div><div class="toolbar"><div class="search-wrap"><span>⌕</span><input id="searchTeams" placeholder="Cari nama ranting ..." aria-label="Cari ranting"></div><select id="filterTeams" aria-label="Filter kategori"></select><button class="btn btn-outline-dark" id="refreshTeams">↻ Perbarui</button></div><div class="table-outer"><table class="data-table"><thead><tr><th>#</th><th>Ranting / Tim</th><th>Kategori</th><th>Peserta</th><th>Pembayaran</th></tr></thead><tbody id="publicTeamsBody"></tbody></table></div></section>
+<section class="page inner-page" id="page-undian"><div class="page-head draw-page-head"><div><span class="overline">TECHNICAL MEETING / UNDIAN TERBUKA</span><h1>Undian <i>adil,</i><br>siap bertanding.</h1><p>Urutan ditentukan secara acak di server. Setiap penekanan tombol panitia memilih satu ranting dari tim yang belum terundi. Perwakilan bisa menekan tombol pada perangkat panitia saat TM.</p></div><button id="fullscreenTM" class="btn btn-dark">⛶ Tayangkan layar penuh</button></div><button id="exitPresentation" type="button">✕ Keluar tayangan</button><div id="drawCategoryTabs" class="pill-tabs"></div><div id="drawPanel" class="draw-panel"></div></section>
+<section class="page inner-page" id="page-bagan"><div class="page-head bracket-head"><div><span class="overline">BAGAN / JADWAL PERTANDINGAN</span><h1>Jalan menuju <i>final.</i></h1><p>Bagan muncul otomatis setelah undian selesai. Tim yang mendapat bye langsung maju ke babak berikutnya; pemenang pertandingan diisi panitia.</p></div><button class="btn btn-outline-dark" id="printBracket">▤ Cetak bagan</button></div><div id="bracketCategoryTabs" class="pill-tabs"></div><div id="bracketPanel"></div></section>
+<section class="page inner-page" id="page-panitia"><div class="page-head"><span class="overline">AKSES KHUSUS / PENGURUS & PANITIA</span><h1>Ruang <i>panitia.</i></h1><p>Kelola data tim, biaya, rekening, verifikasi pembayaran, undian, dan hasil perlombaan.</p></div><div id="adminRoot"></div></section>
+</main>
+<footer class="site-footer"><div class="footer-main"><div><strong>GURU <i>GAMES.</i></strong><p>HARI GURU NASIONAL × HUT KE-81 PGRI</p></div><div class="footer-logos"><img src="assets/hut81.jpg" alt="Logo HUT ke-81 PGRI"><img src="assets/logo-pgri.jpg" alt="Logo PGRI Cabang Sekotong"><img src="assets/logo-pjok.jpg" alt="Logo KKG PJOK Sekotong"></div></div><div class="footer-bottom"><span>© 2026 PGRI CABANG SEKOTONG · PEKAN OLAHRAGA GURU</span><span>SPORTIVITAS • SOLIDARITAS • PRESTASI</span></div></footer>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="modal" class="modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-label="Informasi"><button id="closeModal" class="modal-close" aria-label="Tutup">×</button><div id="modalContent"></div></div></div>
+<svg class="svg-defs" xmlns="http://www.w3.org/2000/svg"><symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol></svg>
+<script>window.APP_DEMO_MODE=false;</script>
+<script src="app.js" defer></script>
+</body>
+</html>
