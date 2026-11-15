@@ -1,18 +1,56 @@
-const CATS = ['futsal','gobak','tarik_putra','tarik_putri'];
+const INITIAL_CATEGORIES = [
+ {id:'futsal',name:'Futsal Putra',short:'Futsal',gender:'Putra',art:'futsal',fee:150000,package_group:'',package_fee:0,min_players:1,max_players:30,rules:'Ketentuan jumlah pemain dan perlengkapan mengikuti juknis panitia.',enabled:true},
+ {id:'gobak',name:'Gobak Sodor Putri',short:'Gobak Sodor',gender:'Putri',art:'gobak',fee:100000,package_group:'',package_fee:0,min_players:1,max_players:30,rules:'Ketentuan jumlah pemain dan perlengkapan mengikuti juknis panitia.',enabled:true},
+ {id:'tarik_putra',name:'Tarik Tambang Putra',short:'Tarik Tambang',gender:'Putra',art:'tarik',fee:150000,package_group:'tarik_tambang',package_fee:150000,min_players:1,max_players:30,rules:'Boleh mendaftar kategori putra saja atau bersama kategori putri.',enabled:true},
+ {id:'tarik_putri',name:'Tarik Tambang Putri',short:'Tarik Tambang',gender:'Putri',art:'tarik',fee:150000,package_group:'tarik_tambang',package_fee:150000,min_players:1,max_players:30,rules:'Boleh mendaftar kategori putri saja atau bersama kategori putra.',enabled:true}
+];
 const DEFAULTS = {
-  event_name: 'Pekan Olahraga Guru Sekotong 2026',
-  registration_open: true,
-  bank_name: '', bank_account: '', bank_holder: '',
-  cash_instruction: 'Pembayaran langsung melalui bendahara panitia.',
-  ranting_options: '',
-  contact: '',
-  venue: 'Sekotong, Lombok Barat',
-  fee_futsal: '150000', fee_gobak: '100000', fee_tarik: '150000'
+ event_name:'Pekan Olahraga Guru Sekotong 2026',season_year:'2026',organizer:'PGRI Cabang Kecamatan Sekotong',
+ event_start:'2026-11-18',event_end:'2026-11-19',tm_date:'2026-11-16',tm_time:'09:00',tm_venue:'SDN 1 Cendi Manik',
+ registration_open:true,bank_name:'',bank_account:'',bank_holder:'',
+ cash_instruction:'Pembayaran langsung melalui bendahara panitia.',ranting_options:'',contact:'',venue:'Sekotong, Lombok Barat',
+ rules_general:'Panitia berhak memverifikasi persyaratan peserta. Setiap tim mengikuti aturan lomba dan keputusan Technical Meeting.',
+ theme_primary:'#e5323c',theme_secondary:'#172b40',theme_accent:'#e9bd67',theme_preset:'pgri',anniversary_number:'81',
+ poster_url:'',hero_image_url:'',logo_hut_url:'',logo_pgri_url:'',logo_pjok_url:'',
+ spin_duration:'8500',categories_json:JSON.stringify(INITIAL_CATEGORIES),
+ media_hut_rev:'',media_pgri_rev:'',media_pjok_rev:'',media_poster_rev:'',media_hero_rev:'',
+ fee_futsal:'150000',fee_gobak:'100000',fee_tarik:'150000'
 };
+const parseCategories = settings => {try {const arr=JSON.parse(settings.categories_json);return Array.isArray(arr)?arr:INITIAL_CATEGORIES;}catch{return INITIAL_CATEGORIES}};
+const idsFor = settings => new Set(parseCategories(settings).map(c=>c.id));
+const billAmount = (categories,settings) => {
+ const selected=new Set(categories),byGroup=new Map();let total=0;
+ for(const cat of parseCategories(settings).filter(c=>selected.has(c.id))){
+  const group=cat.package_group||'';
+  if(!group){total+=Number(cat.fee)||0;continue;}
+  if(!byGroup.has(group))byGroup.set(group,[]);
+  byGroup.get(group).push(cat);
+ }
+ for(const cats of byGroup.values())total+=cats.length>1?Number(cats[0].package_fee||0):Number(cats[0].fee||0);
+ return total;
+};
+const validHex=v=>/^#[0-9a-fA-F]{6}$/.test(v);
+function normalizeCategories(input){
+ if(!Array.isArray(input)||!input.length||input.length>20)throw Error('Jumlah kategori harus 1 sampai 20.');
+ const ids=new Set(),groups=new Map();
+ const arr=input.map((x,i)=>{
+  const id=clean(x?.id,32),name=clean(x?.name,80),short=clean(x?.short||name,35),gender=clean(x?.gender,30),art=clean(x?.art,15)||'futsal';
+  const group=clean(x?.package_group,32),fee=Number(x?.fee),pkg=Number(x?.package_fee||0),min=Number(x?.min_players),max=Number(x?.max_players);
+  if(!/^[a-z][a-z0-9_]{1,31}$/.test(id)||ids.has(id))throw Error('ID kategori harus unik dan hanya huruf kecil, angka atau garis bawah.');
+  ids.add(id);
+  if(!name||!short||!['futsal','gobak','tarik'].includes(art))throw Error('Nama, nama pendek atau ilustrasi kategori tidak valid.');
+  if(group&&!/^[a-z][a-z0-9_]{0,31}$/.test(group))throw Error('Kode paket tidak valid.');
+  if(!Number.isSafeInteger(fee)||fee<0||fee>100000000||!Number.isSafeInteger(pkg)||pkg<0||pkg>100000000)throw Error('Biaya kategori/paket harus angka Rp0–Rp100.000.000.');
+  if(!Number.isInteger(min)||!Number.isInteger(max)||min<1||max>30||max<min)throw Error('Jumlah pemain minimal dan maksimal harus 1–30, maksimal tidak lebih kecil dari minimal.');
+  if(group){if(groups.has(group)&&groups.get(group)!==pkg)throw Error('Harga paket dengan kode yang sama harus identik.');groups.set(group,pkg);}
+  return {id,name,short,gender,art,fee,package_group:group,package_fee:pkg,min_players:min,max_players:max,rules:clean(x?.rules,1200),enabled:x?.enabled!==false};
+ });
+ return arr;
+}
 const j = (data, status=200, extra={}) => Response.json(data,{status,headers:{'Cache-Control':'no-store',...extra}});
 const bad = (msg,code=400)=>j({ok:false,error:msg},code);
 const clean = (s,max=120)=>String(s??'').trim().replace(/\s+/g,' ').slice(0,max);
-const goodCat = s=>CATS.includes(s);
+
 const utf8 = new TextEncoder();
 const toHex = u=>Array.from(u).map(x=>x.toString(16).padStart(2,'0')).join('');
 async function digest(secret, message){
@@ -34,9 +72,16 @@ async function authorized(req, env){
 }
 async function getSettings(db){
  const rows=await db.prepare('SELECT key,value FROM settings').all();
- const result={...DEFAULTS};
+ const result={...DEFAULTS},stored=new Set();
  for(const r of rows.results||[])if(Object.hasOwn(DEFAULTS,r.key)){
-   result[r.key]=r.key==='registration_open' ? r.value==='true':r.value;
+   stored.add(r.key);result[r.key]=r.key==='registration_open' ? r.value==='true':r.value;
+ }
+ // Preserve legacy custom prices for V6 installations during the upgrade.
+ if(!stored.has('categories_json')){
+  const base=structuredClone(INITIAL_CATEGORIES);
+  for(const c of base){if(c.id==='futsal')c.fee=Number(result.fee_futsal);if(c.id==='gobak')c.fee=Number(result.fee_gobak);
+    if(c.id.startsWith('tarik')){c.fee=Number(result.fee_tarik);c.package_fee=Number(result.fee_tarik)} }
+  result.categories_json=JSON.stringify(base);
  }
  return result;
 }
@@ -56,39 +101,44 @@ async function pull(db,admin=false){
  const teams=(trs.results||[]).map(t=>admin ? {...t,participants:JSON.parse(t.participants||'[]')} : {
    id:t.id,group_id:t.group_id,ranting:t.ranting,category:t.category,payment_status:t.payment_status,members_count:JSON.parse(t.participants||'[]').length
  });
- const states=Object.fromEntries(CATS.map(c=>[c,'idle']));
+ const states=Object.fromEntries(parseCategories(settings).map(c=>[c.id,'idle']));
  for(const x of ds.results||[])states[x.category]=x.status;
  return {ok:true,settings,teams,registrations:admin?(regs.results||[]):undefined,states,slots:drs.results||[],winners:ws.results||[],details:details.results||[],admin};
 }
-function billAmount(categories,settings){
- const n=k=>Number(settings[k]||0);
- return (categories.includes('futsal')?n('fee_futsal'):0)+
-        (categories.includes('gobak')?n('fee_gobak'):0)+
-        (categories.some(c=>c==='tarik_putra'||c==='tarik_putri')?n('fee_tarik'):0);
+function cfgSafeSnapshot(raw){
+ try{const parsed=JSON.parse(raw||'[]');
+  if(Array.isArray(parsed))return {categories_json:JSON.stringify(parsed)};
+  const base=structuredClone(INITIAL_CATEGORIES);
+  for(const c of base){if(c.id==='futsal')c.fee=Number(parsed.fee_futsal||c.fee);if(c.id==='gobak')c.fee=Number(parsed.fee_gobak||c.fee);
+   if(c.id.startsWith('tarik')){c.fee=Number(parsed.fee_tarik||c.fee);c.package_fee=Number(parsed.fee_tarik||c.package_fee)}}
+  return {categories_json:JSON.stringify(base)};
+ }catch{return {categories_json:DEFAULTS.categories_json}}
 }
-
+function bracketSizeFor(count){let size=2;while(size<count)size*=2;return size;}
+function seedOrder(size){let seeds=[1,2];while(seeds.length<size){const sum=2*seeds.length+1;seeds=seeds.flatMap(n=>[n,sum-n]);}return seeds;}
 function buildMatches(data,cat){
- const slots=data.slots.filter(x=>x.category===cat).sort((a,b)=>a.draw_order-b.draw_order);
+ const slots=data.slots.filter(x=>x.category===cat);
  if(!slots.length)return [];
- const teamids=slots.map(x=>x.team_id);
- let size=2;while(size<teamids.length)size*=2;
- let seeds=[1,2];while(seeds.length<size){let mirror=seeds.length*2+1;seeds=seeds.flatMap(x=>[x,mirror-x]);}
- let pair=seeds.map(s=>teamids[s-1]||null), rounds=[];
- for(let r=0;pair.length>=2;r++){
-   const matches=[];const next=[];
-   for(let m=0;m<pair.length;m+=2){
-     const a=pair[m],b=pair[m+1];
+ const teams=data.teams.filter(x=>x.category===cat);
+ const seeded=seedOrder(bracketSizeFor(teams.length));
+ const byNumber=new Map(slots.map(x=>[x.draw_order,x.team_id]));
+ let incoming=seeded.map(n=>n>teams.length?{type:'bye'}:byNumber.has(n)?{type:'team',id:byNumber.get(n)}:{type:'awaiting'}),rounds=[];
+ for(let r=0;incoming.length>=2;r++){
+   const matches=[],next=[];
+   for(let m=0;m<incoming.length/2;m++){
+     const aNode=incoming[m*2],bNode=incoming[m*2+1];
+     const a=aNode.type==='team'?aNode.id:null,b=bNode.type==='team'?bNode.id:null;
      let winner=null;
-     if(r===0&&a&&!b)winner=a;
-     else if(r===0&&b&&!a)winner=b;
-     else if(a&&b){
-       const saved=data.winners.find(w=>w.category===cat&&w.round===r&&w.match_no===m/2);
-       if(saved&&(saved.winner_team_id===a||saved.winner_team_id===b))winner=saved.winner_team_id;
+     if(aNode.type==='team' && bNode.type==='bye')winner=a;
+     else if(bNode.type==='team'&&aNode.type==='bye')winner=b;
+     else if(a && b){
+       const saved=data.winners.find(w=>w.category===cat&&Number(w.round)===r&&Number(w.match_no)===m);
+       if(saved&&(Number(saved.winner_team_id)===a||Number(saved.winner_team_id)===b))winner=Number(saved.winner_team_id);
      }
-     matches.push({round:r,match_no:m/2,a,b,winner,automatic:!!winner&&(!a||!b)});
-     next.push(winner);
+     matches.push({round:r,match_no:m,a,b,winner,automatic:!!winner&&(aNode.type==='bye'||bNode.type==='bye')});
+     next.push(winner?{type:'team',id:winner}:{type:'awaiting'});
    }
-   rounds.push(matches);pair=next;
+   rounds.push(matches);incoming=next;
  }
  return rounds;
 }
@@ -115,6 +165,19 @@ export async function onRequest({request,env}){
  const url=new URL(request.url),path=url.pathname.replace(/^\/api\/?/,'').replace(/\/$/,'');
  const method=request.method.toUpperCase(), db=env.DB;
  if(!db)return bad('Database belum terhubung. Atur binding D1 bernama DB di Cloudflare Pages.',503);
+ // File media publik. Berkas hanya dapat diganti oleh panitia yang login.
+ const mediaKey=path.startsWith('media/')?path.slice(6):'';
+ const validMedia=new Set(['hut','pgri','pjok','poster','hero']);
+ if(method==='GET'&&validMedia.has(mediaKey)){
+  try{
+   const row=await db.prepare('SELECT mime,data FROM site_media WHERE key=?').bind(mediaKey).first();
+   if(!row)return new Response('Gambar belum diunggah',{status:404,headers:{'Cache-Control':'no-store'}});
+   const binary=atob(row.data);const bytes=new Uint8Array(binary.length);
+   for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+   return new Response(bytes,{headers:{'Content-Type':row.mime,'Cache-Control':'public, max-age=300','X-Content-Type-Options':'nosniff'}});
+  }catch{return new Response('Media belum tersedia',{status:404})}
+ }
+
  try{
  if(method==='GET'&&path==='public')return j(await pull(db,false));
  if(method==='POST'&&path==='register'){
@@ -124,14 +187,14 @@ export async function onRequest({request,env}){
    if(!cfg.registration_open)return bad('Pendaftaran sedang ditutup. Hubungi panitia.');
    const ranting=clean(b.ranting,100),payment=clean(b.payment_method,20);
    if(ranting.length<3||!['cash','transfer'].includes(payment))return bad('Periksa nama ranting dan metode pembayaran.');
-   if(!Array.isArray(b.entries)||b.entries.length<1||b.entries.length>4)return bad('Pilih minimal satu cabang perlombaan.');
+   if(!Array.isArray(b.entries)||b.entries.length<1||b.entries.length>20)return bad('Pilih minimal satu cabang perlombaan.');
    const categories=b.entries.map(x=>clean(x?.category,40));
-   if(categories.some(x=>!goodCat(x))||new Set(categories).size!==categories.length)return bad('Kategori pilihan tidak valid atau berulang.');
-   if(categories.includes('tarik_putra')!==categories.includes('tarik_putri'))return bad('Tarik tambang didaftarkan satu paket: tim putra dan tim putri.');
-   const entries=b.entries.map(x=>({category:clean(x.category,40),participants:validateMembers(x.participants)}));
+   const active=new Map(parseCategories(cfg).filter(c=>c.enabled).map(c=>[c.id,c]));
+   if(categories.some(x=>!active.has(x))||new Set(categories).size!==categories.length)return bad('Kategori pilihan tidak valid, berulang atau sudah ditutup.');
+   const entries=b.entries.map(x=>{const category=clean(x.category,40),cat=active.get(category),players=validateMembers(x.participants);if(players.length<cat.min_players||players.length>cat.max_players)throw Error(`Anggota ${cat.name} harus ${cat.min_players} sampai ${cat.max_players} orang.`);return{category,participants:players};});
    for(const category of categories)if(await state(db,category)!=='idle')return bad('Pendaftaran '+category+' telah ditutup karena undian dimulai.');
    const norm=ranting.toLocaleLowerCase('id-ID'),c=code(),amount=billAmount(categories,cfg);
-   const snapshot=JSON.stringify({fee_futsal:cfg.fee_futsal,fee_gobak:cfg.fee_gobak,fee_tarik:cfg.fee_tarik});
+   const snapshot=cfg.categories_json;
    try{
      const ops=[db.prepare(`INSERT INTO registrations(code,ranting,ranting_norm,contact,notes,payment_method,total_amount,fees_snapshot)
        VALUES(?,?,?,?,?,?,?,?)`).bind(c,ranting,norm,clean(b.contact,100),clean(b.notes,300),payment,amount,snapshot)];
@@ -159,13 +222,94 @@ export async function onRequest({request,env}){
  if(!path.startsWith('admin/')&&path!=='admin')return bad('Rute tidak dikenal.',404);
  if(!await authorized(request,env))return bad('Silakan masuk sebagai panitia.',401);
  if(method==='GET'&&path==='admin')return j(await pull(db,true));
+ if(method==='GET'&&path==='admin/archives'){
+   const rows=await db.prepare('SELECT id,season_year,event_name,saved_at,registrations_count,teams_count FROM archived_editions ORDER BY id DESC').all();
+   return j({ok:true,archives:rows.results||[]});
+ }
+ if(method==='GET'&&path==='admin/archive'){
+   const id=Number(url.searchParams.get('id'));
+   if(!Number.isInteger(id)||id<1)return bad('Arsip tidak valid.');
+   const row=await db.prepare('SELECT * FROM archived_editions WHERE id=?').bind(id).first();
+   if(!row)return bad('Arsip tidak ditemukan.',404);
+   return j({ok:true,archive:row});
+ }
+ if(method==='POST' && (path==='admin/media' || path==='admin/media-reset')){
+   const payload=await request.text();if(payload.length>950000)return bad('Gambar terlalu besar. Maksimal sekitar 700 KB.');
+   let b;try{b=JSON.parse(payload)}catch{return bad('Format unggahan tidak benar.');}
+   if(!validMedia.has(b.key))return bad('Jenis gambar tidak dikenal.');
+   const urlField=({hut:'logo_hut_url',pgri:'logo_pgri_url',pjok:'logo_pjok_url',poster:'poster_url',hero:'hero_image_url'})[b.key];
+   const revField='media_'+b.key+'_rev';
+   if(path==='admin/media'){
+    const match=/^data:(image\/(?:webp|png|jpeg));base64,([A-Za-z0-9+/=]+)$/.exec(b.data_url||'');
+    if(!match||match[2].length>900000)return bad('Format gambar tidak didukung atau terlalu besar.');
+    if(match[2].length%4!==0)return bad('Data gambar tidak lengkap.');
+    const rev=String(Date.now());
+    await db.batch([
+     db.prepare('INSERT INTO site_media(key,mime,data) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET mime=excluded.mime,data=excluded.data').bind(b.key,match[1],match[2]),
+     db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(revField,rev),
+     db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(urlField,'')
+    ]);
+    return j({ok:true});
+   }
+   await db.batch([
+    db.prepare('DELETE FROM site_media WHERE key=?').bind(b.key),
+    db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(revField,''),
+    db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(urlField,'')
+   ]);
+   return j({ok:true});
+ }
  if(method!=='POST')return bad('Metode tidak didukung.',405);
  const b=await body(request);
+ if(path==='admin/new-edition'){
+   const year=clean(b.season_year,4),eventName=clean(b.event_name,120);
+   if(!/^20\d{2}$/.test(year)||!eventName)return bad('Isi tahun 20XX dan judul kegiatan baru.');
+   const current=await pull(db,true);
+   if(year===String(current.settings.season_year))return bad('Tahun baru harus berbeda dari tahun berjalan.');
+   if(clean(b.confirm,20)!=='ARSIPKAN')return bad('Ketik ARSIPKAN untuk konfirmasi pergantian tahun.');
+   const archive={settings:current.settings,registrations:current.registrations,teams:current.teams,states:current.states,slots:current.slots,winners:current.winners,details:current.details};
+   const snapshot=JSON.stringify(archive);
+   const operations=[
+    db.prepare('INSERT INTO archived_editions(season_year,event_name,registrations_count,teams_count,snapshot) VALUES(?,?,?,?,?)').bind(String(current.settings.season_year),String(current.settings.event_name),current.registrations.length,current.teams.length,snapshot),
+    db.prepare('DELETE FROM match_winners'),db.prepare('DELETE FROM match_details'),db.prepare('DELETE FROM draw_slots'),
+    db.prepare('DELETE FROM teams'),db.prepare('DELETE FROM registrations'),
+    db.prepare("UPDATE draw_states SET status='idle'"),
+    db.prepare("INSERT INTO settings(key,value) VALUES('season_year',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(year),
+    db.prepare("INSERT INTO settings(key,value) VALUES('event_name',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(eventName),
+    db.prepare("INSERT INTO settings(key,value) VALUES('registration_open','false') ON CONFLICT(key) DO UPDATE SET value='false'"),
+    db.prepare("INSERT INTO settings(key,value) VALUES('event_start','') ON CONFLICT(key) DO UPDATE SET value=''"),
+    db.prepare("INSERT INTO settings(key,value) VALUES('event_end','') ON CONFLICT(key) DO UPDATE SET value=''"),
+    db.prepare("INSERT INTO settings(key,value) VALUES('tm_date','') ON CONFLICT(key) DO UPDATE SET value=''"),
+    db.prepare("INSERT INTO settings(key,value) VALUES('anniversary_number',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(String((Number(current.settings.anniversary_number)||81)+(Number(year)-Number(current.settings.season_year))))
+   ];
+   await db.batch(operations);
+   return j({ok:true,archived_season:current.settings.season_year,new_season:year});
+ }
  if(path==='admin/settings'){
    const changes={};
-   for(const k of Object.keys(DEFAULTS))if(Object.hasOwn(b,k))changes[k]=k==='registration_open'?(b[k]?'true':'false'):(k==='ranting_options'?String(b[k]??'').trim().slice(0,3000):clean(b[k],k.includes('instruction')?400:150));
+   for(const k of Object.keys(DEFAULTS))if(Object.hasOwn(b,k))changes[k]=k==='registration_open'?(b[k]?'true':'false'):
+     (k==='categories_json'?String(b[k]):k==='ranting_options'?String(b[k]??'').trim().slice(0,3000):
+       k==='rules_general'?String(b[k]??'').trim().slice(0,3000):clean(b[k],k.endsWith('_url')?500:k.includes('instruction')?400:150));
    if(Object.keys(changes).length===0)return bad('Tidak ada pengaturan yang diperbarui.');
-   for(const key of ['fee_futsal','fee_gobak','fee_tarik']){if(Object.hasOwn(changes,key)&&!/^\d*$/.test(changes[key]))return bad('Biaya kategori harus berupa angka tanpa titik atau simbol Rp.');}
+   for(const key of ['fee_futsal','fee_gobak','fee_tarik'])if(Object.hasOwn(changes,key)&&!/^\d*$/.test(changes[key]))return bad('Biaya harus angka.');
+   for(const key of ['theme_primary','theme_secondary','theme_accent'])if(Object.hasOwn(changes,key)&&!validHex(changes[key]))return bad('Warna tema harus format #RRGGBB.');
+   if(Object.hasOwn(changes,'season_year')&&!/^20\d{2}$/.test(changes.season_year))return bad('Tahun kegiatan harus format YYYY.');
+   if(Object.hasOwn(changes,'season_year')){const current=await getSettings(db);if(changes.season_year!==current.season_year){const n=await db.prepare('SELECT COUNT(*) AS n FROM registrations').first();if(n.n>0)return bad('Untuk mengganti tahun dengan peserta aktif, gunakan menu Arsip & Tahun Baru agar data lama aman.');}}
+   for(const key of ['poster_url','hero_image_url','logo_hut_url','logo_pgri_url','logo_pjok_url'])if(Object.hasOwn(changes,key)&&changes[key]&&!/^https:\/\/[^\s]+$/i.test(changes[key]))return bad('URL gambar harus HTTPS publik atau dikosongkan.');
+   if(Object.hasOwn(changes,'anniversary_number')&&!/^\d{1,3}$/.test(changes.anniversary_number))return bad('Nomor HUT maksimal tiga digit.');
+   for(const key of ['event_start','event_end','tm_date'])if(Object.hasOwn(changes,key)&&changes[key]&&!/^20\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(changes[key]))return bad('Tanggal harus format YYYY-MM-DD.');
+   if(Object.hasOwn(changes,'spin_duration')&&![6000,8500,11000].includes(Number(changes.spin_duration)))return bad('Durasi putar hanya 6, 8,5, atau 11 detik.');
+   if(Object.hasOwn(changes,'categories_json')){
+     let normalized;try{normalized=normalizeCategories(JSON.parse(changes.categories_json));}catch(err){return bad(err.message)}
+     const old=await getSettings(db),oldCats=parseCategories(old),newIds=new Set(normalized.map(c=>c.id));
+     for(const c of oldCats.filter(c=>!newIds.has(c.id))){
+       const row=await db.prepare('SELECT COUNT(*) AS n FROM teams WHERE category=?').bind(c.id).first();
+       if(row.n>0||await state(db,c.id)!=='idle')return bad('Kategori '+c.name+' masih memiliki tim atau undian. Nonaktifkan saja, jangan dihapus.');
+     }
+     changes.categories_json=JSON.stringify(normalized);
+     const ops=normalized.map(c=>db.prepare('INSERT OR IGNORE INTO draw_states(category,status) VALUES(?,?)').bind(c.id,'idle'));
+     await db.batch([...ops,...Object.entries(changes).map(([k,v])=>db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k,v))]);
+     return j({ok:true});
+   }
    await db.batch(Object.entries(changes).map(([k,v])=>db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k,v)));
    return j({ok:true});
  }
@@ -185,7 +329,7 @@ export async function onRequest({request,env}){
    const sisterTeams=(await db.prepare('SELECT category FROM teams WHERE registration_id=?').bind(old.group_id).all()).results||[];
    const groupLocked=(await Promise.all(sisterTeams.map(t=>state(db,t.category)))).some(x=>x!=='idle');
    let parts=JSON.parse(old.participants),ranting=old.group_ranting;
-   if(!lock)parts=validateMembers(b.participants);
+   if(!lock){parts=validateMembers(b.participants);const cfg=await getSettings(db),cat=parseCategories(cfg).find(c=>c.id===old.category);if(cat&&(parts.length<cat.min_players||parts.length>cat.max_players))return bad('Jumlah anggota tidak sesuai batas kategori.');}
    if(!groupLocked){ranting=clean(b.ranting,100);if(ranting.length<3)return bad('Nama ranting minimal 3 karakter.');}
 
    try{
@@ -205,12 +349,12 @@ export async function onRequest({request,env}){
    const remaining=(await db.prepare('SELECT category FROM teams WHERE registration_id=?').bind(t.registration_id).all()).results||[];
    if(!remaining.length)await db.prepare('DELETE FROM registrations WHERE id=?').bind(t.registration_id).run();
    else {const orig=await db.prepare('SELECT fees_snapshot FROM registrations WHERE id=?').bind(t.registration_id).first();
-     const snapshot=JSON.parse(orig?.fees_snapshot||'{}');
+     let snapshot=cfgSafeSnapshot(orig?.fees_snapshot);
      await db.prepare('UPDATE registrations SET total_amount=? WHERE id=?').bind(billAmount(remaining.map(x=>x.category),snapshot),t.registration_id).run();}
    return j({ok:true});
  }
  const cat=clean(b.category,40);
- if(!goodCat(cat))return bad('Kategori tidak dikenal.');
+ if(!idsFor(await getSettings(db)).has(cat))return bad('Kategori tidak dikenal.');
  if(path==='admin/start-draw'){
    if(await state(db,cat)!=='idle')return bad('Kategori ini telah memulai undian.');
    const ct=await db.prepare('SELECT COUNT(*) AS n FROM teams WHERE category=?').bind(cat).first();
@@ -220,15 +364,20 @@ export async function onRequest({request,env}){
  }
  if(path==='admin/next-draw'){
    if(await state(db,cat)!=='live')return bad('Undian belum dimulai atau sudah selesai.');
-   const current=(await db.prepare('SELECT team_id FROM draw_slots WHERE category=? ORDER BY draw_order').bind(cat).all()).results||[];
-   const all=(await db.prepare('SELECT id FROM teams WHERE category=?').bind(cat).all()).results||[];
-   const used=new Set(current.map(t=>t.team_id));const remaining=all.filter(x=>!used.has(x.id));
-   if(remaining.length===0){await db.prepare('UPDATE draw_states SET status=? WHERE category=?').bind('complete',cat).run();return j({ok:true});}
-   const winner=randomlyPick(remaining);
-   try{await db.prepare('INSERT INTO draw_slots(category,draw_order,team_id) VALUES(?,?,?)').bind(cat,current.length+1,winner.id).run();}
+   const current=(await db.prepare('SELECT team_id,draw_order FROM draw_slots WHERE category=? ORDER BY draw_order').bind(cat).all()).results||[];
+   const all=(await db.prepare('SELECT id FROM teams WHERE category=? ORDER BY id ASC').bind(cat).all()).results||[];
+   const usedTeams=new Set(current.map(t=>t.team_id));
+   const remainingTeams=all.filter(x=>!usedTeams.has(x.id));
+   if(remainingTeams.length===0){await db.prepare('UPDATE draw_states SET status=? WHERE category=?').bind('complete',cat).run();return j({ok:true,complete:true});}
+   const chosenTeam=remainingTeams[0];
+   const size=all.length;
+   const usedSlots=new Set(current.map(t=>t.draw_order));
+   const remainingSlots=Array.from({length:size},(_,i)=>i+1).filter(n=>!usedSlots.has(n));
+   const slotNo=randomlyPick(remainingSlots);
+   try{await db.prepare('INSERT INTO draw_slots(category,draw_order,team_id) VALUES(?,?,?)').bind(cat,slotNo,chosenTeam.id).run();}
    catch(e){if(/UNIQUE constraint/.test(e.message))return bad('Undian baru saja diproses oleh perangkat lain. Muat ulang lalu lanjutkan.',409);throw e;}
-   if(remaining.length===1)await db.prepare('UPDATE draw_states SET status=? WHERE category=?').bind('complete',cat).run();
-   return j({ok:true,chosen_team_id:winner.id,draw_order:current.length+1,complete:remaining.length===1});
+   if(remainingTeams.length===1)await db.prepare('UPDATE draw_states SET status=? WHERE category=?').bind('complete',cat).run();
+   return j({ok:true,chosen_team_id:chosenTeam.id,slot_no:slotNo,complete:remainingTeams.length===1});
  }
  if(path==='admin/reset-draw'){
    await db.batch([
@@ -243,9 +392,9 @@ export async function onRequest({request,env}){
    const all=await pull(db,true),round=Number(b.round),match=Number(b.match_no);
    const grid=buildMatches(all,cat);
    if(!Number.isInteger(round)||!Number.isInteger(match)||!grid[round]?.[match])return bad('Pertandingan tidak ditemukan.');
-   const day=clean(b.day,2),time=clean(b.time,5),field=clean(b.field,80),note=clean(b.note,160);
+   const day=clean(b.day,10),time=clean(b.time,5),field=clean(b.field,80),note=clean(b.note,160);
    const score_a=clean(b.score_a,3),score_b=clean(b.score_b,3);
-   if(!['','18','19'].includes(day) || (time&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) ||
+   if(!(day===''||day==='18'||day==='19'||/^20\d{2}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(day)) || (time&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) ||
       (score_a&&!/^\d{1,3}$/.test(score_a)) || (score_b&&!/^\d{1,3}$/.test(score_b)))return bad('Tanggal, waktu, atau skor tidak valid.');
    await db.prepare(`INSERT INTO match_details(category,round,match_no,day,time,field,score_a,score_b,note)
      VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(category,round,match_no) DO UPDATE SET
@@ -273,6 +422,6 @@ export async function onRequest({request,env}){
    if(msg.includes('no such table'))return bad('Tabel database belum dibuat. Jalankan schema.sql pada D1 Console.',503);
    if(msg.includes('Unexpected token')||msg.includes('JSON'))return bad('Permintaan berisi data yang tidak valid.');
    console.error('api error',msg);
-   return bad(msg.startsWith('Daftar ')||msg.startsWith('Masukkan ')||msg.startsWith('Ada nama')||msg.startsWith('Ukuran')?msg:'Terjadi gangguan server. Coba lagi atau periksa log Cloudflare.',500);
+   const isInput=msg.startsWith('Daftar ')||msg.startsWith('Masukkan ')||msg.startsWith('Ada nama')||msg.startsWith('Ukuran')||msg.startsWith('Anggota ');return bad(isInput?msg:'Terjadi gangguan server. Coba lagi atau periksa log Cloudflare.',isInput?400:500);
  }
 }
