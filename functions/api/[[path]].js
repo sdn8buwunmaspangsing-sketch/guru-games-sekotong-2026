@@ -154,6 +154,34 @@ function validateMembers(raw){
  if(new Set(p.map(x=>x.toLocaleLowerCase('id-ID'))).size!==p.length)throw Error('Ada nama peserta yang sama dalam satu tim.');
  return p;
 }
+
+// ===== V3: audit log, tagihan manual, edit bagan =====
+async function auditRun(db,action,detail){
+ try{await db.prepare('INSERT INTO audit_log(action,detail) VALUES(?,?)').bind(action,JSON.stringify(detail||{}).slice(0,2000)).run();}catch{}
+}
+const catLabel=(cfg,id)=>parseCategories(cfg).find(c=>c.id===id)?.name||id;
+const toMoney=v=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<0||n>1000000000)throw Error('Nominal harus angka bulat Rp0–Rp1.000.000.000.');return n;};
+function billingSettings(reg,cfg){
+ let cats=[];try{cats=JSON.parse(cfgSafeSnapshot(reg.fees_snapshot).categories_json)}catch{}
+ const have=new Set(cats.map(c=>c.id));
+ for(const c of parseCategories(cfg))if(!have.has(c.id))cats.push(c);
+ return {categories_json:JSON.stringify(cats)};
+}
+// Pertandingan yang dilalui sebuah nomor posisi, dari babak 1 sampai final.
+function pathMatches(size,slot){
+ const pos=seedOrder(size).indexOf(slot),rounds=Math.log2(size),out=[];
+ for(let r=0;r<rounds;r++)out.push({round:r,match_no:pos>>(r+1)});
+ return out;
+}
+async function resultsInPaths(db,cat,size,slots){
+ const [w,d]=await Promise.all([
+  db.prepare('SELECT round,match_no FROM match_winners WHERE category=?').bind(cat).all(),
+  db.prepare("SELECT round,match_no FROM match_details WHERE category=? AND (score_a<>'' OR score_b<>'')").bind(cat).all()]);
+ const hit=new Set([...(w.results||[]),...(d.results||[])].map(x=>x.round+':'+x.match_no));
+ return slots.some(s=>pathMatches(size,s).some(p=>hit.has(p.round+':'+p.match_no)));
+}
+// Pertandingan babak berikutnya yang bergantung pada hasil sebuah pertandingan.
+const downstreamPairs=(round,match,rounds)=>{const out=[];for(let r=round+1;r<rounds;r++)out.push({round:r,match_no:match>>(r-round)});return out;};
 const code=()=>`SKT-${Array.from(crypto.getRandomValues(new Uint8Array(4))).map(x=>x.toString(16).padStart(2,'0')).join('').toUpperCase()}`;
 function randomlyPick(arr){
  if(arr.length===1)return arr[0];
@@ -192,7 +220,7 @@ export async function onRequest({request,env}){
    const active=new Map(parseCategories(cfg).filter(c=>c.enabled).map(c=>[c.id,c]));
    if(categories.some(x=>!active.has(x))||new Set(categories).size!==categories.length)return bad('Kategori pilihan tidak valid, berulang atau sudah ditutup.');
    const entries=b.entries.map(x=>{const category=clean(x.category,40),cat=active.get(category),players=validateMembers(x.participants);if(players.length<cat.min_players||players.length>cat.max_players)throw Error(`Anggota ${cat.name} harus ${cat.min_players} sampai ${cat.max_players} orang.`);return{category,participants:players};});
-   for(const category of categories)if(await state(db,category)!=='idle')return bad('Pendaftaran '+category+' telah ditutup karena undian dimulai.');
+   for(const category of categories)if(await state(db,category)!=='idle')return bad('Pendaftaran '+category+' telah ditutup karena undian dimulai. Hubungi panitia untuk penambahan tim setelah undian.');
    const norm=ranting.toLocaleLowerCase('id-ID'),c=code(),amount=billAmount(categories,cfg);
    const snapshot=cfg.categories_json;
    try{
@@ -222,6 +250,10 @@ export async function onRequest({request,env}){
  if(!path.startsWith('admin/')&&path!=='admin')return bad('Rute tidak dikenal.',404);
  if(!await authorized(request,env))return bad('Silakan masuk sebagai panitia.',401);
  if(method==='GET'&&path==='admin')return j(await pull(db,true));
+ if(method==='GET'&&path==='admin/audit'){
+   const rows=await db.prepare('SELECT id,at,action,detail FROM audit_log ORDER BY id DESC LIMIT 150').all();
+   return j({ok:true,logs:rows.results||[]});
+ }
  if(method==='GET'&&path==='admin/archives'){
    const rows=await db.prepare('SELECT id,season_year,event_name,saved_at,registrations_count,teams_count FROM archived_editions ORDER BY id DESC').all();
    return j({ok:true,archives:rows.results||[]});
@@ -318,7 +350,8 @@ export async function onRequest({request,env}){
    if(!['paid','pending'].includes(pay)||!['cash','transfer'].includes(methodPay))return bad('Status atau metode pembayaran tidak valid.');
    const reg=await db.prepare('SELECT id FROM registrations WHERE id=?').bind(groupId).first();
    if(!reg)return bad('Pendaftaran tidak ditemukan.',404);
-   await db.prepare('UPDATE registrations SET payment_method=?,payment_status=? WHERE id=?').bind(methodPay,pay,groupId).run();
+   await db.prepare("UPDATE registrations SET payment_method=?,payment_status=?,paid_amount=CASE WHEN ?='paid' THEN total_amount WHEN paid_amount>=total_amount THEN 0 ELSE paid_amount END WHERE id=?").bind(methodPay,pay,pay,groupId).run();
+   await auditRun(db,'payment_status',{group_id:groupId,status:pay,method:methodPay});
    return j({ok:true});
  }
  if(path==='admin/team'){
@@ -346,12 +379,71 @@ export async function onRequest({request,env}){
    if(!t)return bad('Tim tidak ditemukan.',404);
    if(await state(db,t.category)!=='idle')return bad('Reset undian kategori tersebut sebelum menghapus tim.');
    await db.prepare('DELETE FROM teams WHERE id=?').bind(id).run();
+   await auditRun(db,'delete_team',{team_id:id,category:t.category});
    const remaining=(await db.prepare('SELECT category FROM teams WHERE registration_id=?').bind(t.registration_id).all()).results||[];
    if(!remaining.length)await db.prepare('DELETE FROM registrations WHERE id=?').bind(t.registration_id).run();
    else {const orig=await db.prepare('SELECT fees_snapshot FROM registrations WHERE id=?').bind(t.registration_id).first();
      let snapshot=cfgSafeSnapshot(orig?.fees_snapshot);
      await db.prepare('UPDATE registrations SET total_amount=? WHERE id=?').bind(billAmount(remaining.map(x=>x.category),snapshot),t.registration_id).run();}
    return j({ok:true});
+ }
+
+ if(path==='admin/billing'){
+   const id=Number(b.group_id),reg=await db.prepare('SELECT * FROM registrations WHERE id=?').bind(id).first();
+   if(!reg)return bad('Pendaftaran tidak ditemukan.',404);
+   const cfg=await getSettings(db),cats=((await db.prepare('SELECT category FROM teams WHERE registration_id=?').bind(id).all()).results||[]).map(x=>x.category);
+   let total=Number(reg.total_amount),manual=Number(reg.amount_manual||0);
+   if(b.auto===true){total=billAmount(cats,billingSettings(reg,cfg));manual=0;}
+   else if(b.total_amount!==undefined&&b.total_amount!==''&&b.total_amount!==null){const n=toMoney(b.total_amount);if(n!==total){total=n;manual=1;}}
+   const paid=(b.paid_amount!==undefined&&b.paid_amount!==''&&b.paid_amount!==null)?toMoney(b.paid_amount):Number(reg.paid_amount||0);
+   const note=clean(b.billing_note,300);
+   if(manual===1&&!note)return bad('Isi catatan alasan karena nominal tagihan diubah manual.');
+   const method=['cash','transfer'].includes(clean(b.payment_method,20))?clean(b.payment_method,20):reg.payment_method;
+   const status=paid>=total?'paid':'pending';
+   await db.prepare('UPDATE registrations SET total_amount=?,amount_manual=?,paid_amount=?,billing_note=?,payment_method=?,payment_status=? WHERE id=?').bind(total,manual,paid,manual||note?note:'',method,status,id).run();
+   await auditRun(db,'billing',{ranting:reg.ranting,tagihan_lama:reg.total_amount,tagihan_baru:total,dibayar:paid,manual:manual?'ya':'otomatis',catatan:note});
+   return j({ok:true,total_amount:total,paid_amount:paid,payment_status:status});
+ }
+ if(path==='admin/add-team'){
+   const category=clean(b.category,40),cfg=await getSettings(db),catDef=parseCategories(cfg).find(c=>c.id===category);
+   if(!catDef)return bad('Kategori tidak dikenal.');
+   const players=validateMembers(b.participants);
+   if(players.length<catDef.min_players||players.length>catDef.max_players)return bad(`Anggota ${catDef.name} harus ${catDef.min_players} sampai ${catDef.max_players} orang.`);
+   const st=await state(db,category);
+   if(st==='live')return bad('Undian kategori ini sedang berlangsung. Selesaikan undian dahulu, baru tambahkan tim.');
+   let reg=null;
+   if(b.group_id)reg=await db.prepare('SELECT * FROM registrations WHERE id=?').bind(Number(b.group_id)).first();
+   else{const name=clean(b.ranting,100);if(name.length<3)return bad('Pilih ranting atau ketik nama ranting baru (minimal 3 karakter).');reg=await db.prepare('SELECT * FROM registrations WHERE ranting_norm=?').bind(name.toLocaleLowerCase('id-ID')).first();
+     if(!reg&&!['cash','transfer'].includes(clean(b.payment_method,20)))return bad('Pilih metode pembayaran untuk ranting baru.');
+     b._newName=name;}
+   if(b.group_id&&!reg)return bad('Ranting tidak ditemukan.',404);
+   if(reg&&await db.prepare('SELECT 1 AS x FROM teams WHERE registration_id=? AND category=?').bind(reg.id,category).first())return bad('Ranting ini sudah memiliki tim pada kategori tersebut.');
+   const n=(await db.prepare('SELECT COUNT(*) AS n FROM teams WHERE category=?').bind(category).first()).n;
+   let slot=null;
+   if(st==='complete'){
+     const size=bracketSizeFor(n);
+     if(n>=size)return bad('Bagan kategori ini sudah penuh dan tidak memiliki slot BYE. Tim baru hanya dapat mengisi slot BYE.');
+     slot=n+1;
+     if(await resultsInPaths(db,category,size,[slot]))return bad('Pertandingan yang akan menjadi lawan tim baru sudah memiliki hasil/skor. Batalkan hasilnya (tombol BATAL pada bagan) lalu coba lagi.');
+   }
+   const ranting=reg?reg.ranting:b._newName,norm=ranting.toLocaleLowerCase('id-ID');
+   const ownedCats=reg?((await db.prepare('SELECT category FROM teams WHERE registration_id=?').bind(reg.id).all()).results||[]).map(x=>x.category):[];
+   const ops=[];let newTotal,newPaid=0,oldTotal=0,newStatus='pending',manual=0;
+   if(reg){
+     oldTotal=Number(reg.total_amount);manual=Number(reg.amount_manual||0);newPaid=Number(reg.paid_amount||0);
+     newTotal=manual?oldTotal:billAmount([...ownedCats,category],billingSettings(reg,cfg));
+     newStatus=newPaid>=newTotal?'paid':'pending';
+     ops.push(db.prepare('UPDATE registrations SET total_amount=?,payment_status=? WHERE id=?').bind(newTotal,newStatus,reg.id));
+   }else{
+     newTotal=billAmount([category],cfg);
+     ops.push(db.prepare(`INSERT INTO registrations(code,ranting,ranting_norm,contact,notes,payment_method,total_amount,fees_snapshot)
+       VALUES(?,?,?,?,?,?,?,?)`).bind(code(),ranting,norm,clean(b.contact,100),clean(b.notes,300),clean(b.payment_method,20),newTotal,cfg.categories_json));
+   }
+   ops.push(db.prepare('INSERT INTO teams(registration_id,category,participants) SELECT id,?,? FROM registrations WHERE ranting_norm=?').bind(category,JSON.stringify(players),norm));
+   if(slot)ops.push(db.prepare('INSERT INTO draw_slots(category,draw_order,team_id) SELECT ?,?,t.id FROM teams t WHERE t.category=? AND t.registration_id=(SELECT id FROM registrations WHERE ranting_norm=?)').bind(category,slot,category,norm));
+   try{await db.batch(ops);}catch(err){if(/UNIQUE constraint/i.test(err.message))return bad('Data bentrok dengan perubahan lain. Muat ulang lalu coba lagi.',409);throw err;}
+   await auditRun(db,'add_team',{ranting,kategori:catDef.name,slot_bagan:slot||'belum diundi',tagihan_lama:oldTotal,tagihan_baru:newTotal});
+   return j({ok:true,slot_no:slot,total_amount:newTotal,previous_total:oldTotal,payment_status:newStatus,new_registration:!reg},201);
  }
  const cat=clean(b.category,40);
  if(!idsFor(await getSettings(db)).has(cat))return bad('Kategori tidak dikenal.');
@@ -385,7 +477,7 @@ export async function onRequest({request,env}){
      db.prepare('DELETE FROM draw_slots WHERE category=?').bind(cat),
      db.prepare('DELETE FROM match_details WHERE category=?').bind(cat),
      db.prepare('UPDATE draw_states SET status=? WHERE category=?').bind('idle',cat)
-   ]);return j({ok:true});
+   ]);await auditRun(db,'reset_draw',{kategori:cat});return j({ok:true});
  }
  if(path==='admin/match-details'){
    if(await state(db,cat)!=='complete')return bad('Undian belum selesai.');
@@ -410,15 +502,52 @@ export async function onRequest({request,env}){
    const m=grid[round][match];
    if(!m.a||!m.b)return bad('Pertandingan ini belum memiliki dua tim; tim dengan bye lolos otomatis.');
    if(chosen!==m.a&&chosen!==m.b)return bad('Pemenang harus salah satu dari dua tim yang bertanding.');
+   const prev=await db.prepare('SELECT winner_team_id FROM match_winners WHERE category=? AND round=? AND match_no=?').bind(cat,round,match).first();
+   const ops=[db.prepare('INSERT INTO match_winners(category,round,match_no,winner_team_id) VALUES(?,?,?,?) ON CONFLICT(category,round,match_no) DO UPDATE SET winner_team_id=excluded.winner_team_id').bind(cat,round,match,chosen)];
+   // Hanya jalur pertandingan yang bergantung pada hasil ini yang dibersihkan, bukan seluruh babak.
+   if(prev&&Number(prev.winner_team_id)!==chosen)for(const d of downstreamPairs(round,match,grid.length))ops.push(db.prepare('DELETE FROM match_winners WHERE category=? AND round=? AND match_no=?').bind(cat,d.round,d.match_no));
+   await db.batch(ops);
+   await auditRun(db,'set_winner',{kategori:catLabel(all.settings,cat),pertandingan:`R${round+1}-P${match+1}`,pemenang_id:chosen});
+   return j({ok:true});
+ }
+
+ if(path==='admin/undo-winner'){
+   const round=Number(b.round),match=Number(b.match_no);
+   if(!Number.isInteger(round)||!Number.isInteger(match))return bad('Pertandingan tidak valid.');
+   const w=await db.prepare('SELECT winner_team_id FROM match_winners WHERE category=? AND round=? AND match_no=?').bind(cat,round,match).first();
+   if(!w)return bad('Pertandingan ini belum memiliki pemenang tercatat.');
+   const n=(await db.prepare('SELECT COUNT(*) AS n FROM teams WHERE category=?').bind(cat).first()).n,rounds=Math.log2(bracketSizeFor(n));
+   const down=downstreamPairs(round,match,rounds);
+   const ops=[db.prepare('DELETE FROM match_winners WHERE category=? AND round=? AND match_no=?').bind(cat,round,match)];
+   for(const d of down){
+     ops.push(db.prepare('DELETE FROM match_winners WHERE category=? AND round=? AND match_no=?').bind(cat,d.round,d.match_no));
+     ops.push(db.prepare("UPDATE match_details SET score_a='',score_b='' WHERE category=? AND round=? AND match_no=?").bind(cat,d.round,d.match_no));
+   }
+   await db.batch(ops);
+   await auditRun(db,'undo_winner',{kategori:cat,pertandingan:`R${round+1}-P${match+1}`,pemenang_id:w.winner_team_id});
+   return j({ok:true});
+ }
+ if(path==='admin/swap-slots'){
+   if(await state(db,cat)!=='complete')return bad('Undian kategori ini belum selesai.');
+   const a=Number(b.slot_a),c=Number(b.slot_b);
+   const rows=(await db.prepare('SELECT draw_order,team_id FROM draw_slots WHERE category=?').bind(cat).all()).results||[];
+   const A=rows.find(x=>x.draw_order===a),B=rows.find(x=>x.draw_order===c);
+   if(!A||!B||a===c)return bad('Pilih dua nomor posisi berbeda yang sudah terisi.');
+   const size=bracketSizeFor(rows.length);
+   if(await resultsInPaths(db,cat,size,[a,c]))return bad('Pertandingan terkait sudah memiliki hasil/skor. Batalkan hasilnya terlebih dahulu (tombol BATAL pada bagan).');
+   // Tiga langkah dalam satu transaksi agar batasan UNIQUE(category,team_id) tidak terlanggar.
    await db.batch([
-     db.prepare('INSERT INTO match_winners(category,round,match_no,winner_team_id) VALUES(?,?,?,?) ON CONFLICT(category,round,match_no) DO UPDATE SET winner_team_id=excluded.winner_team_id').bind(cat,round,match,chosen),
-     db.prepare('DELETE FROM match_winners WHERE category=? AND round>?').bind(cat,round)
+     db.prepare('UPDATE draw_slots SET team_id=-1 WHERE category=? AND draw_order=?').bind(cat,a),
+     db.prepare('UPDATE draw_slots SET team_id=? WHERE category=? AND draw_order=?').bind(A.team_id,cat,c),
+     db.prepare('UPDATE draw_slots SET team_id=? WHERE category=? AND draw_order=?').bind(B.team_id,cat,a)
    ]);
+   await auditRun(db,'swap_slots',{kategori:cat,posisi_a:a,tim_a:A.team_id,posisi_b:c,tim_b:B.team_id});
    return j({ok:true});
  }
  return bad('Rute admin tidak dikenal.',404);
  }catch(e){
    const msg=String(e?.message||e);
+   if(msg.includes('no such column')||msg.includes('audit_log'))return bad('Database belum diperbarui. Jalankan migration-v3.sql pada D1 Console lebih dulu.',503);
    if(msg.includes('no such table'))return bad('Tabel database belum dibuat. Jalankan schema.sql pada D1 Console.',503);
    if(msg.includes('Unexpected token')||msg.includes('JSON'))return bad('Permintaan berisi data yang tidak valid.');
    console.error('api error',msg);
