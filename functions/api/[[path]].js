@@ -14,8 +14,16 @@ const DEFAULTS = {
  poster_url:'',hero_image_url:'',logo_hut_url:'',logo_pgri_url:'',logo_pjok_url:'',
  spin_duration:'8500',categories_json:JSON.stringify(INITIAL_CATEGORIES),
  media_hut_rev:'',media_pgri_rev:'',media_pjok_rev:'',media_poster_rev:'',media_hero_rev:'',
- fee_futsal:'150000',fee_gobak:'100000',fee_tarik:'150000'
+ fee_futsal:'150000',fee_gobak:'100000',fee_tarik:'150000',
+ brand_name:'GURU GAMES',brand_sub:'PGRI CABANG SEKOTONG',stamp_text:'PGRI',participant_label:'Ranting',meeting_label:'TM',
+ hero_line1:'SEMANGAT',hero_line2:'GURU.',hero_line3:'JUARA!',
+ hero_text:'Merayakan Hari Guru Nasional dan HUT ke-81 PGRI lewat sportivitas, solidaritas, dan pertandingan antarranting yang penuh semangat.',
+ hero_sideword:'SATU PROFESI · SATU SEMANGAT · SATU LAPANGAN',hashtag:'#GURUJUARA2026',
+ cta_line1:'BERSAMA DI LAPANGAN.',cta_line2:'SOLID DI PROFESI.',footer_tagline:'SPORTIVITAS • SOLIDARITAS • PRESTASI',
+ use_default_assets:true
 };
+const BOOLS=new Set(['registration_open','use_default_assets']);
+const isCatKey=k=>/^cat_[a-z][a-z0-9_]{1,31}$/.test(String(k||''));
 const parseCategories = settings => {try {const arr=JSON.parse(settings.categories_json);return Array.isArray(arr)?arr:INITIAL_CATEGORIES;}catch{return INITIAL_CATEGORIES}};
 const idsFor = settings => new Set(parseCategories(settings).map(c=>c.id));
 const billAmount = (categories,settings) => {
@@ -38,12 +46,12 @@ function normalizeCategories(input){
   const group=clean(x?.package_group,32),fee=Number(x?.fee),pkg=Number(x?.package_fee||0),min=Number(x?.min_players),max=Number(x?.max_players);
   if(!/^[a-z][a-z0-9_]{1,31}$/.test(id)||ids.has(id))throw Error('ID kategori harus unik dan hanya huruf kecil, angka atau garis bawah.');
   ids.add(id);
-  if(!name||!short||!['futsal','gobak','tarik'].includes(art))throw Error('Nama, nama pendek atau ilustrasi kategori tidak valid.');
+  if(!name||!short||!['futsal','gobak','tarik','polos'].includes(art))throw Error('Nama, nama pendek atau ilustrasi kategori tidak valid.');
   if(group&&!/^[a-z][a-z0-9_]{0,31}$/.test(group))throw Error('Kode paket tidak valid.');
   if(!Number.isSafeInteger(fee)||fee<0||fee>100000000||!Number.isSafeInteger(pkg)||pkg<0||pkg>100000000)throw Error('Biaya kategori/paket harus angka Rp0–Rp100.000.000.');
   if(!Number.isInteger(min)||!Number.isInteger(max)||min<1||max>30||max<min)throw Error('Jumlah pemain minimal dan maksimal harus 1–30, maksimal tidak lebih kecil dari minimal.');
   if(group){if(groups.has(group)&&groups.get(group)!==pkg)throw Error('Harga paket dengan kode yang sama harus identik.');groups.set(group,pkg);}
-  return {id,name,short,gender,art,fee,package_group:group,package_fee:pkg,min_players:min,max_players:max,rules:clean(x?.rules,1200),enabled:x?.enabled!==false};
+  return {id,name,short,gender,art,fee,package_group:group,package_fee:pkg,min_players:min,max_players:max,rules:clean(x?.rules,1200),enabled:x?.enabled!==false,image_rev:clean(x?.image_rev,20)};
  });
  return arr;
 }
@@ -74,7 +82,7 @@ async function getSettings(db){
  const rows=await db.prepare('SELECT key,value FROM settings').all();
  const result={...DEFAULTS},stored=new Set();
  for(const r of rows.results||[])if(Object.hasOwn(DEFAULTS,r.key)){
-   stored.add(r.key);result[r.key]=r.key==='registration_open' ? r.value==='true':r.value;
+   stored.add(r.key);result[r.key]=BOOLS.has(r.key) ? r.value==='true':r.value;
  }
  // Preserve legacy custom prices for V6 installations during the upgrade.
  if(!stored.has('categories_json')){
@@ -196,7 +204,7 @@ export async function onRequest({request,env}){
  // File media publik. Berkas hanya dapat diganti oleh panitia yang login.
  const mediaKey=path.startsWith('media/')?path.slice(6):'';
  const validMedia=new Set(['hut','pgri','pjok','poster','hero']);
- if(method==='GET'&&validMedia.has(mediaKey)){
+ if(method==='GET'&&(validMedia.has(mediaKey)||isCatKey(mediaKey))){
   try{
    const row=await db.prepare('SELECT mime,data FROM site_media WHERE key=?').bind(mediaKey).first();
    if(!row)return new Response('Gambar belum diunggah',{status:404,headers:{'Cache-Control':'no-store'}});
@@ -268,9 +276,13 @@ export async function onRequest({request,env}){
  if(method==='POST' && (path==='admin/media' || path==='admin/media-reset')){
    const payload=await request.text();if(payload.length>950000)return bad('Gambar terlalu besar. Maksimal sekitar 700 KB.');
    let b;try{b=JSON.parse(payload)}catch{return bad('Format unggahan tidak benar.');}
-   if(!validMedia.has(b.key))return bad('Jenis gambar tidak dikenal.');
+   if(!validMedia.has(b.key)&&!isCatKey(b.key))return bad('Jenis gambar tidak dikenal.');
    const urlField=({hut:'logo_hut_url',pgri:'logo_pgri_url',pjok:'logo_pjok_url',poster:'poster_url',hero:'hero_image_url'})[b.key];
    const revField='media_'+b.key+'_rev';
+   let cats=null,catIdx=-1;
+   if(isCatKey(b.key)){cats=parseCategories(await getSettings(db));catIdx=cats.findIndex(c=>'cat_'+c.id===b.key);if(catIdx<0)return bad('Simpan pengaturan kategori baru lebih dulu, baru unggah gambarnya.');}
+   const upsertSetting=(k,v)=>db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k,v);
+   const settingStmts=rev=>{if(catIdx>=0){cats[catIdx]={...cats[catIdx],image_rev:rev};return [upsertSetting('categories_json',JSON.stringify(cats))]}return [upsertSetting(revField,rev),upsertSetting(urlField,'')]};
    if(path==='admin/media'){
     const match=/^data:(image\/(?:webp|png|jpeg));base64,([A-Za-z0-9+/=]+)$/.exec(b.data_url||'');
     if(!match||match[2].length>900000)return bad('Format gambar tidak didukung atau terlalu besar.');
@@ -278,15 +290,13 @@ export async function onRequest({request,env}){
     const rev=String(Date.now());
     await db.batch([
      db.prepare('INSERT INTO site_media(key,mime,data) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET mime=excluded.mime,data=excluded.data').bind(b.key,match[1],match[2]),
-     db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(revField,rev),
-     db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(urlField,'')
+     ...settingStmts(rev)
     ]);
     return j({ok:true});
    }
    await db.batch([
     db.prepare('DELETE FROM site_media WHERE key=?').bind(b.key),
-    db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(revField,''),
-    db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(urlField,'')
+    ...settingStmts('')
    ]);
    return j({ok:true});
  }
@@ -311,23 +321,25 @@ export async function onRequest({request,env}){
     db.prepare("INSERT INTO settings(key,value) VALUES('event_start','') ON CONFLICT(key) DO UPDATE SET value=''"),
     db.prepare("INSERT INTO settings(key,value) VALUES('event_end','') ON CONFLICT(key) DO UPDATE SET value=''"),
     db.prepare("INSERT INTO settings(key,value) VALUES('tm_date','') ON CONFLICT(key) DO UPDATE SET value=''"),
-    db.prepare("INSERT INTO settings(key,value) VALUES('anniversary_number',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(String((Number(current.settings.anniversary_number)||81)+(Number(year)-Number(current.settings.season_year))))
+    db.prepare("INSERT INTO settings(key,value) VALUES('anniversary_number',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(/^\d+$/.test(String(current.settings.anniversary_number))?String(Number(current.settings.anniversary_number)+(Number(year)-Number(current.settings.season_year))):String(current.settings.anniversary_number||''))
    ];
    await db.batch(operations);
    return j({ok:true,archived_season:current.settings.season_year,new_season:year});
  }
  if(path==='admin/settings'){
    const changes={};
-   for(const k of Object.keys(DEFAULTS))if(Object.hasOwn(b,k))changes[k]=k==='registration_open'?(b[k]?'true':'false'):
+   for(const k of Object.keys(DEFAULTS))if(Object.hasOwn(b,k))changes[k]=BOOLS.has(k)?(b[k]?'true':'false'):
      (k==='categories_json'?String(b[k]):k==='ranting_options'?String(b[k]??'').trim().slice(0,3000):
-       k==='rules_general'?String(b[k]??'').trim().slice(0,3000):clean(b[k],k.endsWith('_url')?500:k.includes('instruction')?400:150));
+       k==='rules_general'?String(b[k]??'').trim().slice(0,3000):k==='hero_text'?clean(b[k],400):clean(b[k],k.endsWith('_url')?500:k.includes('instruction')?400:150));
    if(Object.keys(changes).length===0)return bad('Tidak ada pengaturan yang diperbarui.');
    for(const key of ['fee_futsal','fee_gobak','fee_tarik'])if(Object.hasOwn(changes,key)&&!/^\d*$/.test(changes[key]))return bad('Biaya harus angka.');
    for(const key of ['theme_primary','theme_secondary','theme_accent'])if(Object.hasOwn(changes,key)&&!validHex(changes[key]))return bad('Warna tema harus format #RRGGBB.');
    if(Object.hasOwn(changes,'season_year')&&!/^20\d{2}$/.test(changes.season_year))return bad('Tahun kegiatan harus format YYYY.');
    if(Object.hasOwn(changes,'season_year')){const current=await getSettings(db);if(changes.season_year!==current.season_year){const n=await db.prepare('SELECT COUNT(*) AS n FROM registrations').first();if(n.n>0)return bad('Untuk mengganti tahun dengan peserta aktif, gunakan menu Arsip & Tahun Baru agar data lama aman.');}}
    for(const key of ['poster_url','hero_image_url','logo_hut_url','logo_pgri_url','logo_pjok_url'])if(Object.hasOwn(changes,key)&&changes[key]&&!/^https:\/\/[^\s]+$/i.test(changes[key]))return bad('URL gambar harus HTTPS publik atau dikosongkan.');
-   if(Object.hasOwn(changes,'anniversary_number')&&!/^\d{1,3}$/.test(changes.anniversary_number))return bad('Nomor HUT maksimal tiga digit.');
+   if(Object.hasOwn(changes,'anniversary_number')&&!/^[\p{L}\p{N}]{0,4}$/u.test(changes.anniversary_number))return bad('Angka/inisial pada logo maksimal 4 huruf atau angka.');
+   for(const key of ['participant_label','meeting_label'])if(Object.hasOwn(changes,key)&&!/^[\p{L}\p{N} ./-]{1,30}$/u.test(changes[key]))return bad('Sebutan peserta/rapat 1–30 karakter (huruf, angka, spasi).');
+   if(Object.hasOwn(changes,'brand_name')&&!changes.brand_name)return bad('Nama aplikasi tidak boleh kosong.');
    for(const key of ['event_start','event_end','tm_date'])if(Object.hasOwn(changes,key)&&changes[key]&&!/^20\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(changes[key]))return bad('Tanggal harus format YYYY-MM-DD.');
    if(Object.hasOwn(changes,'spin_duration')&&![6000,8500,11000].includes(Number(changes.spin_duration)))return bad('Durasi putar hanya 6, 8,5, atau 11 detik.');
    if(Object.hasOwn(changes,'categories_json')){
